@@ -247,24 +247,52 @@ async function buildWasatchPDF(o,mode='technical'){
  txt('EXECUTIVE SUMMARY',M,y,7,true,muted);y+=13;y=paragraph(v.summary||'No executive summary entered.',M,y,W-2*M,9,ink)+9;
  txt('BUYER FOLLOW-UP',M,y,7,true,muted);y+=13;y=paragraph(v.recommendation||'No buyer follow-up recommendation entered.',M,y,W-2*M,9,ink)+12;
  if(mode==='customer'){
-    heading('What the inspection results mean');
-    y=paragraph('This report highlights items that may need attention. Monitor means keep an eye on the item. Repair recommended means have a qualified repair facility evaluate or correct it. Safety concern means address the concern before normal use. Not inspected means the item could not be evaluated; it is not a pass.',M,y,W-2*M,8.5,ink)+10;
-    let attention=[];
+    const customerStatus=s=>({
+      'Pass / no abnormality observed':'No issue observed',
+      'Monitor':'Keep an eye on it',
+      'Repair recommended':'Repair recommended',
+      'Safety concern':'Safety concern',
+      'Not inspected':'Not inspected',
+      'Not applicable':'Not applicable'
+    }[s]||'Not inspected');
+    const statusCounts={'Pass / no abnormality observed':0,'Monitor':0,'Repair recommended':0,'Safety concern':0,'Not inspected':0,'Not applicable':0};
     for(let [group,items] of Object.entries(groups))for(let i=0;i<items.length;i++){
-      let k=group+'|'+i,st=o.checks?.[k]||'Not inspected',note=o.checks?.[k+'|note']||'';
-      if(['Monitor','Repair recommended','Safety concern'].includes(st))attention.push({group,item:items[i],status:st,note});
+      let st=o.checks?.[group+'|'+i]||'Not inspected';
+      statusCounts[statusCounts.hasOwnProperty(st)?st:'Not inspected']++;
     }
-    heading('Items to review');
-    if(!attention.length){ensure(25);txt('No checklist items were marked Monitor, Repair recommended, or Safety concern.',M,y,8.5,false,muted);y+=20;}
-    for(let a of attention){
-      let noteLines=a.note?pdfWrap('Inspector note: '+a.note,85):[],itemLines=pdfWrap(a.item,70);
-      let rh=Math.max(31,itemLines.length*10+noteLines.length*9+17);ensure(rh+4);
-      txt(a.group.toUpperCase(),M,y,6.5,true,muted);
-      let badgeW=Math.min(125,Math.max(55,a.status.length*3.5+12));
-      rect(W-M-badgeW,y-2,badgeW,14,statusColor(a.status));txt(a.status,M+(W-2*M)-badgeW+6,y+8,6.2,true,statusText(a.status));
-      itemLines.forEach((ln,j)=>txt(ln,M,y+13+j*10,8,false,ink));
-      noteLines.forEach((ln,j)=>txt(ln,M+8,y+13+itemLines.length*10+j*9,7,false,muted));
-      y+=rh;rule(y);y+=4;
+    heading('Inspection at a glance');
+    const countRows=[
+      ['No issue observed',statusCounts['Pass / no abnormality observed']],
+      ['Keep an eye on it',statusCounts['Monitor']],
+      ['Repair recommended',statusCounts['Repair recommended']],
+      ['Safety concern',statusCounts['Safety concern']],
+      ['Not inspected',statusCounts['Not inspected']],
+      ['Not applicable',statusCounts['Not applicable']]
+    ];
+    for(let i=0;i<countRows.length;i+=2){
+      ensure(22);
+      let a=countRows[i],b=countRows[i+1];
+      txt(a[0]+': '+a[1],M,y,8,true,ink);
+      if(b)txt(b[0]+': '+b[1],M+270,y,8,true,ink);
+      y+=15;
+    }
+    y=paragraph('Every checklist item is listed below. “No issue observed” means no unusual condition was identified during this inspection; it is not a guarantee. “Not inspected” means the item could not be evaluated and should not be treated as a pass.',M,y,W-2*M,8,muted)+8;
+    heading('Complete inspection results');
+    for(let [group,items] of Object.entries(groups)){
+      ensure(30);rect(M,y,W-2*M,19,'#EAF0F5');txt(group,M+8,y+13,8.5,true,navy);y+=24;
+      for(let i=0;i<items.length;i++){
+        let k=group+'|'+i,st=o.checks?.[k]||'Not inspected',note=o.checks?.[k+'|note']||'';
+        let display=customerStatus(st),lines=pdfWrap(items[i],59),noteLines=note?pdfWrap('Inspector note: '+note,82):[];
+        let rh=Math.max(27,lines.length*10+noteLines.length*9+13);
+        ensure(rh+3);
+        if(y+rh>H-54){newPage();rect(M,y,W-2*M,19,'#EAF0F5');txt(group+' (continued)',M+8,y+13,8.5,true,navy);y+=24;}
+        lines.forEach((ln,j)=>txt(ln,M+5,y+10+j*10,7.5,false,ink));
+        let badgeW=Math.min(142,Math.max(66,display.length*3.35+12));
+        rect(W-M-badgeW,y+1,badgeW,14,statusColor(st));
+        txt(display,M+(W-2*M)-badgeW+6,y+11,6.1,true,statusText(st));
+        noteLines.forEach((ln,j)=>txt(ln,M+10,y+10+lines.length*10+j*9,6.8,false,muted));
+        y+=rh;rule(y);y+=3;
+      }
     }
   }else{
     heading('Detailed checklist results');

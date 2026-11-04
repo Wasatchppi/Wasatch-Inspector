@@ -21,7 +21,7 @@ button:disabled{opacity:.45}.actions{display:flex;flex-wrap:wrap;gap:8px;margin-
 .tabs{display:flex;gap:7px;overflow:auto;padding:5px 0 12px}.tab{white-space:nowrap;background:#e7ecf2;color:var(--navy);padding:9px 12px;border-radius:30px;font-size:12px}.tab.active{background:var(--navy);color:white}
 .status{font-size:11px;border-radius:30px;padding:5px 9px;background:#e8f5ee;color:var(--green);font-weight:800}.status.off{background:#fff4df;color:#925b08}
 .item{border-top:1px solid var(--line);padding:12px 0}.item:first-child{border-top:0}.itemname{font-weight:700;font-size:14px}.itemrow{display:grid;grid-template-columns:1fr 150px;gap:8px;align-items:center}.item select{padding:8px;font-size:12px;min-height:38px}
-.smallbtn{min-height:34px;padding:7px 10px;font-size:12px}.photo{width:84px;height:70px;object-fit:cover;border-radius:8px;border:1px solid var(--line);margin:5px 6px 0 0}
+.smallbtn{min-height:34px;padding:7px 10px;font-size:12px}.photo{width:84px;height:70px;object-fit:cover;border-radius:8px;border:1px solid var(--line);margin:5px 6px 0 0}#photoPreview{flex-wrap:wrap}#fPhotos{padding:9px;min-height:46px}
 .statgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}.stat{background:#f1f4f8;border-radius:10px;padding:12px}.stat b{display:block;font-size:22px;color:var(--navy)}
 .hidden{display:none!important}.notice{padding:10px 12px;background:#fff7ed;border:1px solid #fed7aa;border-radius:10px;font-size:12px}
 footer{position:fixed;bottom:0;left:0;right:0;background:#ffffffed;border-top:1px solid var(--line);padding:9px 14px calc(9px + env(safe-area-inset-bottom));display:flex;justify-content:center;gap:8px;z-index:6}
@@ -60,7 +60,10 @@ footer button{flex:1;max-width:260px}.pill{display:inline-block;padding:3px 8px;
 <div class="card"><h2>Findings & photographic evidence</h2><p class="muted">Record specific observations and link photos to each finding.</p>
 <div class="field"><label>System / location</label><input id="fSystem" placeholder="Example: Front tires"></div>
 <div class="field"><label>Observation</label><textarea id="fText" placeholder="Describe what you observed, measured or heard."></textarea></div>
-<div class="grid"><div class="field"><label>Priority</label><select id="fPriority"><option>Monitor</option><option>Repair recommended</option><option>Safety concern</option><option>Further diagnosis</option></select></div><div class="field"><label>Photo(s)</label><input id="fPhotos" type="file" accept=image/* multiple></div></div>
+<div class="grid"><div class="field"><label>Priority</label><select id="fPriority"><option>Monitor</option><option>Repair recommended</option><option>Safety concern</option><option>Further diagnosis</option></select></div><div class="field"><label>Choose photos from phone</label><input id="fPhotos" type="file" accept="image/*" multiple></div></div>
+<div class="actions"><button type="button" class="secondary" onclick="document.getElementById('fCamera').click()">＋ Take photo</button><span id="photoCount" class="muted">No photos selected</span></div>
+<input id="fCamera" type="file" accept="image/*" capture="environment" class="hidden">
+<div id="photoPreview" class="actions" aria-live="polite"></div>
 <button class="orange" onclick="addFinding()">Add finding</button><div id="findingList"></div></div>
 </div>
 <div id="tab-summary" class="tabpage hidden">
@@ -110,8 +113,51 @@ function renderChecklist(){let h='';for(let [g,items] of Object.entries(groups))
 function setCheck(k,v){k=decodeURIComponent(k);current.checks[k]=v;touch()}
 function setNote(k,v){k=decodeURIComponent(k);current.checks[k+'|note']=v;touch()}
 function renderFindings(){document.getElementById('findingList').innerHTML=current.findings.map((f,i)=>`<div class="item"><b>${esc(f.system)}</b> · <span class="pill">${esc(f.priority)}</span><p>${esc(f.text)}</p><div>${(f.photos||[]).map(p=>`<img class="photo" src="${p}" alt="Finding photo">`).join('')}</div><button class="danger smallbtn" onclick="removeFinding(${i})">Remove finding</button></div>`).join('')||'<p class="muted">No additional findings entered.</p>'}
-async function addFinding(){let system=document.getElementById('fSystem').value.trim(),text=document.getElementById('fText').value.trim();if(!system||!text){alert('Enter a system/location and an observation.');return}let files=[...document.getElementById('fPhotos').files],photos=[];for(let file of files){photos.push(await resizeImage(file))}current.findings.push({system,text,priority:document.getElementById('fPriority').value,photos});document.getElementById('fSystem').value='';document.getElementById('fText').value='';document.getElementById('fPhotos').value='';renderFindings();touch()}
-function resizeImage(file){return new Promise(resolve=>{let img=new Image(),url=URL.createObjectURL(file);img.onload=()=>{let scale=Math.min(1,1400/Math.max(img.width,img.height)),c=document.createElement('canvas');c.width=img.width*scale;c.height=img.height*scale;c.getContext('2d').drawImage(img,0,0,c.width,c.height);resolve(c.toDataURL('image/jpeg',.78));URL.revokeObjectURL(url)};img.onerror=()=>{resolve('')};img.src=url})}
+let selectedPhotoFiles=[];
+function refreshPhotoSelection(){
+  const count=document.getElementById('photoCount'),preview=document.getElementById('photoPreview');
+  count.textContent=selectedPhotoFiles.length?`${selectedPhotoFiles.length} photo(s) selected`:'No photos selected';
+  preview.innerHTML='';
+  selectedPhotoFiles.forEach((file,i)=>{
+    const url=URL.createObjectURL(file),img=document.createElement('img');
+    img.className='photo';img.src=url;img.alt=`Selected photo ${i+1}`;
+    img.onload=()=>URL.revokeObjectURL(url);
+    preview.append(img);
+  });
+}
+document.addEventListener('DOMContentLoaded',()=>{
+  const library=document.getElementById('fPhotos'),camera=document.getElementById('fCamera');
+  if(library)library.addEventListener('change',()=>{selectedPhotoFiles=[...library.files];refreshPhotoSelection()});
+  if(camera)camera.addEventListener('change',()=>{selectedPhotoFiles.push(...camera.files);refreshPhotoSelection();camera.value=''});
+});
+async function addFinding(){
+  let system=document.getElementById('fSystem').value.trim(),text=document.getElementById('fText').value.trim();
+  if(!system||!text){alert('Enter a system/location and an observation.');return}
+  let photos=[];
+  for(let file of selectedPhotoFiles){
+    let photo=await resizeImage(file);
+    if(photo)photos.push(photo);
+  }
+  current.findings.push({system,text,priority:document.getElementById('fPriority').value,photos});
+  document.getElementById('fSystem').value='';document.getElementById('fText').value='';
+  document.getElementById('fPhotos').value='';document.getElementById('fCamera').value='';
+  selectedPhotoFiles=[];refreshPhotoSelection();renderFindings();touch();
+}
+async function resizeImage(file){
+  // Decode phone photos where the browser supports them, then store a compact JPEG.
+  try{
+    let bitmap=await createImageBitmap(file),scale=Math.min(1,1400/Math.max(bitmap.width,bitmap.height));
+    let c=document.createElement('canvas');c.width=Math.max(1,Math.round(bitmap.width*scale));c.height=Math.max(1,Math.round(bitmap.height*scale));
+    let ctx=c.getContext('2d');ctx.drawImage(bitmap,0,0,c.width,c.height);bitmap.close?.();
+    return c.toDataURL('image/jpeg',.82);
+  }catch(e){
+    return new Promise(resolve=>{
+      let img=new Image(),url=URL.createObjectURL(file);
+      img.onload=()=>{try{let scale=Math.min(1,1400/Math.max(img.naturalWidth,img.naturalHeight)),c=document.createElement('canvas');c.width=Math.max(1,Math.round(img.naturalWidth*scale));c.height=Math.max(1,Math.round(img.naturalHeight*scale));c.getContext('2d').drawImage(img,0,0,c.width,c.height);resolve(c.toDataURL('image/jpeg',.82))}catch(err){resolve('')}finally{URL.revokeObjectURL(url)}};
+      img.onerror=()=>{URL.revokeObjectURL(url);resolve('')};img.src=url;
+    });
+  }
+}
 function removeFinding(i){if(confirm('Remove this finding?')){current.findings.splice(i,1);renderFindings();touch()}}
 function touch(){if(!current)return;current.updated=Date.now();document.getElementById('saveState').textContent='Changes not yet saved'}
 async function saveCurrent(){if(!current)return;document.querySelectorAll('[data-v]').forEach(el=>current.vehicle[el.dataset.v]=el.value);current.updated=Date.now();await put(current);document.getElementById('saveState').textContent='Saved on this device · '+new Date().toLocaleTimeString();renderHome()}

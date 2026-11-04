@@ -20,7 +20,7 @@ button.secondary{background:#e8edf3;color:var(--navy)}button.orange{background:v
 button:disabled{opacity:.45}.actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
 .tabs{display:flex;gap:7px;overflow:auto;padding:5px 0 12px}.tab{white-space:nowrap;background:#e7ecf2;color:var(--navy);padding:9px 12px;border-radius:30px;font-size:12px}.tab.active{background:var(--navy);color:white}
 .status{font-size:11px;border-radius:30px;padding:5px 9px;background:#e8f5ee;color:var(--green);font-weight:800}.status.off{background:#fff4df;color:#925b08}
-.item{border-top:1px solid var(--line);padding:12px 0}.item:first-child{border-top:0}.itemname{font-weight:700;font-size:14px}.itemrow{display:grid;grid-template-columns:1fr 150px;gap:8px;align-items:center}.item select{padding:8px;font-size:12px;min-height:38px}
+.item{border-top:1px solid var(--line);padding:12px 0}.item:first-child{border-top:0}.itemname{font-weight:700;font-size:14px}.itemrow{display:grid;grid-template-columns:1fr 150px;gap:8px;align-items:center}.item select{padding:8px;font-size:12px;min-height:38px}.guide-progress{height:8px;background:#e8edf3;border-radius:20px;overflow:hidden;margin:10px 0}.guide-progress>span{display:block;height:100%;background:var(--orange);width:0}.guide-choice{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:12px 0}.guide-choice button{min-height:52px}.guide-photo{display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:#f7f9fb;border:1px dashed #b8c4d2;padding:12px;border-radius:10px}.guide-photo input{max-width:100%}.guide-nav{display:flex;gap:8px;margin-top:16px}.guide-nav button{flex:1}
 .smallbtn{min-height:34px;padding:7px 10px;font-size:12px}.photo{width:84px;height:70px;object-fit:cover;border-radius:8px;border:1px solid var(--line);margin:5px 6px 0 0}#photoPreview{flex-wrap:wrap}#fPhotos{padding:10px;min-height:48px;font-size:14px;background:#fff}
 .statgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}.stat{background:#f1f4f8;border-radius:10px;padding:12px}.stat b{display:block;font-size:22px;color:var(--navy)}
 .hidden{display:none!important}.notice{padding:10px 12px;background:#fff7ed;border:1px solid #fed7aa;border-radius:10px;font-size:12px}
@@ -55,7 +55,7 @@ footer button{flex:1;max-width:260px}.pill{display:inline-block;padding:3px 8px;
 <div class="field full"><label>Customer contact / other notes</label><textarea data-v="customerNotes"></textarea></div>
 </div></div>
 </div>
-<div id="tab-checklist" class="tabpage hidden"><div class="card"><h2>Guided inspection checklist</h2><p class="muted">Select a status for each applicable item. “Not inspected” is not a pass.</p><div id="checklist"></div></div></div>
+<div id="tab-checklist" class="tabpage hidden"><div class="card"><h2>Guided inspection</h2><p class="muted">Work through one item at a time. Your answers are saved as you move forward. You control when to continue.</p><div id="checklist"></div></div></div>
 <div id="tab-findings" class="tabpage hidden">
 <div class="card"><h2>Findings & photographic evidence</h2><p class="muted">Record specific observations and link photos to each finding.</p>
 <div class="field"><label>System / location</label><input id="fSystem" placeholder="Example: Front tires"></div>
@@ -93,7 +93,7 @@ const groups={
 'Road test':['Road test performed? If not, record reason','Approximate distance / duration and conditions','Starting, idle and acceleration','Transmission / clutch behavior','Steering tracking, pull and return','Brake response, pulsation, noise or pull','Suspension / chassis noise over road surfaces','Vibration at speed / under acceleration / braking','Cruise control / driver assistance tested if safe','Temperature / warning lights during test'],
 'Vehicle-specific systems':['Diesel: cold start, smoke, idle, boost symptoms and visible leaks','Diesel: DEF / SCR / DPF warning status and scan findings if supported','Turbo / supercharger: visible condition, noise and leaks','Hybrid / EV: high-voltage visual inspection only within training / equipment limits','Hybrid / EV: charge port and charging function if safely testable','Luxury / ADAS: electronic modules, cameras, radar and driver aids','Truck / SUV: hitch, towing connector, bed / tailgate, 4WD equipment','Modifications: lift, wheels / tires, tuning, exhaust and wiring']
 };
-let db, current=null;
+let db, current=null;let guideGroupIndex=0,guideItemIndex=0;
 function openDB(){return new Promise((res,rej)=>{let r=indexedDB.open(DB,1);r.onupgradeneeded=()=>r.result.createObjectStore(STORE,{keyPath:'id'});r.onsuccess=()=>{db=r.result;res()};r.onerror=()=>rej(r.error)})}
 function tx(mode='readonly'){return db.transaction(STORE,mode).objectStore(STORE)}
 function all(){return new Promise((res,rej)=>{let r=tx().getAll();r.onsuccess=()=>res(r.result.sort((a,b)=>b.updated-a.updated));r.onerror=()=>rej(r.error)})}
@@ -106,10 +106,29 @@ function setNet(){let n=document.getElementById('net');n.textContent=navigator.o
 window.addEventListener('online',setNet);window.addEventListener('offline',setNet);
 function fields(){let f=[['customer','Customer name'],['phone','Customer phone / email'],['year','Year'],['make','Make'],['model','Model'],['vin','VIN'],['plate','Plate / state'],['mileage','Odometer / units'],['engine','Engine / displacement'],['fuel','Fuel type'],['transmission','Transmission'],['drivetrain','Drivetrain'],['color','Exterior color'],['date','Inspection date']];document.getElementById('vehicleFields').innerHTML=f.map(([k,l])=>`<div class="field"><label>${l}</label><input data-v="${k}" ${k==='date'?'type="date"':''}></div>`).join('')}
 function bindFields(){document.querySelectorAll('[data-v]').forEach(el=>{el.value=current.vehicle[el.dataset.v]||'';el.oninput=()=>{current.vehicle[el.dataset.v]=el.value;touch()}})}
-function newInspection(){current=fresh();current.vehicle.date=new Date().toISOString().slice(0,10);fields();bindFields();renderChecklist();renderFindings();document.getElementById('home').classList.add('hidden');document.getElementById('editor').classList.remove('hidden');showTab('vehicle');document.getElementById('editorTitle').textContent='New inspection';saveCurrent()}
-async function editInspection(id){current=await get(id);fields();bindFields();renderChecklist();renderFindings();document.getElementById('home').classList.add('hidden');document.getElementById('editor').classList.remove('hidden');showTab('vehicle');document.getElementById('editorTitle').textContent=current.vehicle.year+' '+current.vehicle.make+' '+current.vehicle.model}
+function newInspection(){guideGroupIndex=0;guideItemIndex=0;current=fresh();current.vehicle.date=new Date().toISOString().slice(0,10);fields();bindFields();renderChecklist();renderFindings();document.getElementById('home').classList.add('hidden');document.getElementById('editor').classList.remove('hidden');showTab('vehicle');document.getElementById('editorTitle').textContent='New inspection';saveCurrent()}
+async function editInspection(id){guideGroupIndex=0;guideItemIndex=0;current=await get(id);fields();bindFields();renderChecklist();renderFindings();document.getElementById('home').classList.add('hidden');document.getElementById('editor').classList.remove('hidden');showTab('vehicle');document.getElementById('editorTitle').textContent=current.vehicle.year+' '+current.vehicle.make+' '+current.vehicle.model}
 function showTab(name){document.querySelectorAll('.tabpage').forEach(x=>x.classList.add('hidden'));document.getElementById('tab-'+name).classList.remove('hidden');document.querySelectorAll('.tab').forEach(x=>x.classList.toggle('active',x.dataset.tab===name))}
-function renderChecklist(){let h='';for(let [g,items] of Object.entries(groups)){h+=`<h3>${g}</h3>`;items.forEach((item,i)=>{let k=g+'|'+i;h+=`<div class="item"><div class="itemrow"><div class="itemname">${esc(item)}</div><select aria-label="Status" onchange="setCheck('${encodeURIComponent(k)}',this.value)">${STATUSES.map(s=>`<option ${current.checks[k]===s?'selected':''}>${s}</option>`).join('')}</select></div><input style="margin-top:7px" placeholder="Notes / measurements (optional)" value="${esc(current.checks[k+'|note']||'')}" oninput="setNote('${encodeURIComponent(k)}',this.value)"></div>`})}document.getElementById('checklist').innerHTML=h}
+function renderChecklist(){
+ const entries=Object.entries(groups),g=entries[guideGroupIndex]||entries[0],group=g[0],items=g[1];
+ guideItemIndex=Math.min(guideItemIndex,items.length-1);const item=items[guideItemIndex],k=group+'|'+guideItemIndex,enc=encodeURIComponent(k);
+ const total=entries.reduce((n,x)=>n+x[1].length,0),doneBefore=entries.slice(0,guideGroupIndex).reduce((n,x)=>n+x[1].length,0)+guideItemIndex+1;
+ const status=current.checks[k]||'Not inspected',photos=current.checks[k+'|photos']||[];
+ const h=`<div class="topline"><span class="pill">Category ${guideGroupIndex+1} of ${entries.length}</span><span class="muted">Item ${guideItemIndex+1} of ${items.length}</span></div>
+ <div class="guide-progress"><span style="width:${Math.round(doneBefore/total*100)}%"></span></div>
+ <h3 style="margin-top:12px">${esc(group)}</h3><div class="card" style="margin:8px 0;background:#f8fafc"><div class="muted">INSPECTION ITEM</div><div style="font-size:18px;font-weight:800;margin:6px 0 14px">${esc(item)}</div>
+ <label for="guideStatus">What did you find?</label><select id="guideStatus" style="margin-top:6px" onchange="setCheck('${enc}',this.value);renderChecklist()">${STATUSES.map(x=>`<option ${status===x?'selected':''}>${x}</option>`).join('')}</select>
+ <div class="field"><label for="guideNote">Notes or measurements (optional)</label><textarea id="guideNote" placeholder="Add details that will help the customer understand this item." oninput="setNote('${enc}',this.value)">${esc(current.checks[k+'|note']||'')}</textarea></div>
+ <div class="field"><label>Photos (recommended for damage or repairs)</label><div class="guide-photo"><input type="file" accept="image/*" multiple aria-label="Attach photos to this inspection item" onchange="attachChecklistPhotos(this,'${enc}')"><span class="muted">Choose photos, take a picture, or browse when offered by your phone.</span></div><div class="muted">${photos.length?photos.length+' photo(s) attached to this item':'No photos attached'}</div><div>${photos.map((src,i)=>`<img class="photo" src="${src}" alt="Inspection item photo"><button class="danger smallbtn" onclick="removeChecklistPhoto('${enc}',${i})">Remove</button>`).join('')}</div></div>
+ </div><div class="guide-nav"><button class="secondary" onclick="previousGuideItem()" ${doneBefore===1?'disabled':''}>← Back</button><button class="orange" onclick="nextGuideItem()">${doneBefore===total?'Finish checklist':'Save & Next →'}</button></div>
+ <p class="muted" style="margin-top:12px">You can go back at any time to review or change an answer. “Not inspected” does not mean the item passed.</p>`;
+ document.getElementById('checklist').innerHTML=h;
+}
+async function attachChecklistPhotos(input,encoded){const k=decodeURIComponent(encoded),files=Array.from(input.files||[]),existing=current.checks[k+'|photos']||[];for(const f of files){const data=await resizeImage(f);if(data)existing.push(data)}current.checks[k+'|photos']=existing;touch();renderChecklist();}
+function removeChecklistPhoto(encoded,i){const k=decodeURIComponent(encoded),a=current.checks[k+'|photos']||[];a.splice(i,1);current.checks[k+'|photos']=a;touch();renderChecklist()}
+async function nextGuideItem(){const entries=Object.entries(groups),items=entries[guideGroupIndex][1];if(guideItemIndex<items.length-1)guideItemIndex++;else if(guideGroupIndex<entries.length-1){guideGroupIndex++;guideItemIndex=0}else{await saveCurrent();alert('You have reached the end of the guided checklist. Review your findings and summary before creating the report.');showTab('findings');return}await saveCurrent();renderChecklist();window.scrollTo({top:0,behavior:'smooth'})}
+async function previousGuideItem(){if(guideItemIndex>0)guideItemIndex--;else if(guideGroupIndex>0){guideGroupIndex--;guideItemIndex=groups[Object.keys(groups)[guideGroupIndex]].length-1}else return;renderChecklist();window.scrollTo({top:0,behavior:'smooth'})}
+
 function setCheck(k,v){k=decodeURIComponent(k);current.checks[k]=v;touch()}
 function setNote(k,v){k=decodeURIComponent(k);current.checks[k+'|note']=v;touch()}
 function renderFindings(){document.getElementById('findingList').innerHTML=current.findings.map((f,i)=>`<div class="item"><b>${esc(f.system)}</b> · <span class="pill">${esc(f.priority)}</span><p>${esc(f.text)}</p><div>${(f.photos||[]).map(p=>`<img class="photo" src="${p}" alt="Finding photo">`).join('')}</div><button class="danger smallbtn" onclick="removeFinding(${i})">Remove finding</button></div>`).join('')||'<p class="muted">No additional findings entered.</p>'}
@@ -224,6 +243,7 @@ async function buildWasatchPDF(o){
  for(let i=0;i<fields.length;i+=2){ensure(34);let yy=y;labelValue(fields[i][0],fields[i][1],M,yy,245);if(fields[i+1])labelValue(fields[i+1][0],fields[i+1][1],M+270,yy,245);y+=31;}
  heading('Overall assessment');
  let overall=v.overall||'Not rated';rect(M,y,W-2*M,34,statusColor(overall));txt(overall.toUpperCase(),M+12,y+22,13,true,statusText(overall));y+=45;
+ rect(M,y,W-2*M,49,'#F1F4F8');txt('HOW TO READ THIS REPORT',M+10,y+13,7,true,navy);txt('Pass = no unusual condition observed during this inspection.',M+10,y+25,7,false,ink);txt('Monitor = keep an eye on it; Repair = have it evaluated or repaired.',M+10,y+36,7,false,ink);y+=60;
  txt('EXECUTIVE SUMMARY',M,y,7,true,muted);y+=13;y=paragraph(v.summary||'No executive summary entered.',M,y,W-2*M,9,ink)+9;
  txt('BUYER FOLLOW-UP',M,y,7,true,muted);y+=13;y=paragraph(v.recommendation||'No buyer follow-up recommendation entered.',M,y,W-2*M,9,ink)+12;
  // Checklist - include every inspection item, including those not rated.
@@ -245,7 +265,7 @@ async function buildWasatchPDF(o){
  if(!findings.length){ensure(20);txt('No additional findings entered.',M,y,8.5,false,muted);y+=18;}
  for(let f of findings){let lines=pdfWrap(f.text,95);let blockH=22+lines.length*11;ensure(blockH);txt(pdfSafe(f.system)+' - '+pdfSafe(f.priority),M,y,9,true,orange);y+=13;y=paragraph(f.text,M+5,y,W-2*M-10,8.5,ink)+9;}
  heading('Photographic evidence');
- let photoEntries=[];for(let f of findings){for(let p of (f.photos||[])){if(p&&p.startsWith('data:image/jpeg'))photoEntries.push({data:p,caption:f.system+' - '+f.priority})}}
+ let photoEntries=[];for(let f of findings){for(let p of (f.photos||[])){if(p&&p.startsWith('data:image/jpeg'))photoEntries.push({data:p,caption:f.system+' - '+f.priority})}}for(let [group,items] of Object.entries(groups)){for(let i=0;i<items.length;i++){let k=group+'|'+i;for(let p of (o.checks?.[k+'|photos']||[])){if(p&&p.startsWith('data:image/jpeg'))photoEntries.push({data:p,caption:group+' - '+items[i]})}}}
  if(!photoEntries.length){ensure(20);txt('No photographs attached.',M,y,8.5,false,muted);y+=18;}
  for(let i=0;i<photoEntries.length;i++){
    let ph=photoEntries[i],info=await pdfImageInfo(ph.data);let maxW=245,maxH=155,scale=Math.min(maxW/info.w,maxH/info.h),iw=info.w*scale,ih=info.h*scale;ensure(ih+35);
@@ -290,3 +310,4 @@ async function init(){await openDB();setNet();fields();renderHome();if('serviceW
 init();
 </script>
 </body></html>
+

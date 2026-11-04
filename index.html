@@ -219,7 +219,7 @@ function pdfWrap(v,maxChars){let words=pdfSafe(v).split(' '),lines=[],line='';fo
 function pdfColor(hex){let h=hex.replace('#','');return [0,2,4].map(i=>(parseInt(h.slice(i,i+2),16)/255).toFixed(3)).join(' ')}
 function pdfBytesFromBase64(data){let b=data.split(',')[1]||'',raw=atob(b),out=new Uint8Array(raw.length);for(let i=0;i<raw.length;i++)out[i]=raw.charCodeAt(i);return out}
 function pdfImageInfo(data){return new Promise(resolve=>{let im=new Image();im.onload=()=>resolve({w:im.naturalWidth||im.width,h:im.naturalHeight||im.height});im.onerror=()=>resolve({w:4,h:3});im.src=data})}
-async function buildWasatchPDF(o){
+async function buildWasatchPDF(o,mode='technical'){
  const W=612,H=792,M=42,navy='#172B45',orange='#D97732',ink='#202B3A',muted='#667085',line='#D9E0E8';
  let pages=[],page, y=0;
  function newPage(){page={ops:[],images:[]};pages.push(page);page.ops.push(`q ${pdfColor(navy)} rg 0 ${H-76} ${W} 76 re f Q`);page.ops.push(`q ${pdfColor(orange)} rg 0 ${H-80} ${W} 4 re f Q`);page.ops.push(`BT /F2 18 Tf 1 1 1 rg 42 ${H-34} Td (${pdfEscape('WASATCH')}) Tj ET`);page.ops.push(`BT /F2 8 Tf 0.96 0.69 0.49 rg 42 ${H-51} Td (${pdfEscape('INDEPENDENT VEHICLE INSPECTIONS')}) Tj ET`);page.ops.push(`BT /F2 8 Tf 1 1 1 rg 460 ${H-43} Td (${pdfEscape('PRE-PURCHASE REPORT')}) Tj ET`);y=100;}
@@ -234,7 +234,7 @@ async function buildWasatchPDF(o){
  function statusText(s){if(/pass|excellent|good/i.test(s))return '#16794B';if(/monitor|fair/i.test(s))return '#98620B';if(/repair|poor|safety/i.test(s))return '#B42318';return '#475467'}
  newPage();
  // First-page report title and vehicle identity
- txt('PRE-PURCHASE VEHICLE',M,y,17,true,navy);y+=21;txt('INSPECTION REPORT',M,y,17,true,navy);y+=13;
+ txt(mode==='customer'?'VEHICLE INSPECTION':'PRE-PURCHASE VEHICLE',M,y,17,true,navy);y+=21;txt(mode==='customer'?'CUSTOMER REPORT':'INSPECTION REPORT',M,y,17,true,navy);y+=13;
  txt(`REPORT ID: ${o.id||'WASATCH'}   |   GENERATED: ${new Date().toLocaleString()}`,M,y,7,false,muted);y+=20;
  const v=o.vehicle||{};let title=[v.year,v.make,v.model].filter(Boolean).join(' ')||'Vehicle details not completed';
  rect(M,y,W-2*M,42,'#F1F4F8');txt(title,M+12,y+17,13,true,navy);txt(`${v.mileage||'Mileage not entered'}  |  VIN: ${v.vin||'Not entered'}`,M+12,y+31,8,false,muted);y+=54;
@@ -246,21 +246,42 @@ async function buildWasatchPDF(o){
  rect(M,y,W-2*M,49,'#F1F4F8');txt('HOW TO READ THIS REPORT',M+10,y+13,7,true,navy);txt('Pass = no unusual condition observed during this inspection.',M+10,y+25,7,false,ink);txt('Monitor = keep an eye on it; Repair = have it evaluated or repaired.',M+10,y+36,7,false,ink);y+=60;
  txt('EXECUTIVE SUMMARY',M,y,7,true,muted);y+=13;y=paragraph(v.summary||'No executive summary entered.',M,y,W-2*M,9,ink)+9;
  txt('BUYER FOLLOW-UP',M,y,7,true,muted);y+=13;y=paragraph(v.recommendation||'No buyer follow-up recommendation entered.',M,y,W-2*M,9,ink)+12;
- // Checklist - include every inspection item, including those not rated.
- heading('Checklist results');
- for(let [group,items] of Object.entries(groups)){
-   ensure(30);rect(M,y,W-2*M,19,'#EAF0F5');txt(group,M+8,y+13,8.5,true,navy);y+=24;
-   for(let i=0;i<items.length;i++){
-     let k=group+'|'+i,st=o.checks?.[k]||'Not inspected',note=o.checks?.[k+'|note']||'';
-     let lines=pdfWrap(items[i],57),noteLines=note?pdfWrap('Notes: '+note,85):[];let rh=Math.max(25,lines.length*10+noteLines.length*9+8);ensure(rh+3);
-     if(y+rh>H-54){newPage();rect(M,y,W-2*M,19,'#EAF0F5');txt(group+' (continued)',M+8,y+13,8.5,true,navy);y+=24;}
-     lines.forEach((ln,j)=>txt(ln,M+5,y+10+j*10,7.5,false,ink));
-     let badgeW=Math.min(135,Math.max(52,st.length*3.4+12));rect(W-M-badgeW,y+2,badgeW,14,statusColor(st));txt(st,M+(W-2*M)-badgeW+6,y+12,6.3,true,statusText(st));
-     noteLines.forEach((ln,j)=>txt(ln,M+10,y+10+lines.length*10+j*9,6.8,false,muted));
-     y+=rh;rule(y);y+=3;
-   }
- }
- heading('Additional findings');
+ if(mode==='customer'){
+    heading('What the inspection results mean');
+    y=paragraph('This report highlights items that may need attention. Monitor means keep an eye on the item. Repair recommended means have a qualified repair facility evaluate or correct it. Safety concern means address the concern before normal use. Not inspected means the item could not be evaluated; it is not a pass.',M,y,W-2*M,8.5,ink)+10;
+    let attention=[];
+    for(let [group,items] of Object.entries(groups))for(let i=0;i<items.length;i++){
+      let k=group+'|'+i,st=o.checks?.[k]||'Not inspected',note=o.checks?.[k+'|note']||'';
+      if(['Monitor','Repair recommended','Safety concern'].includes(st))attention.push({group,item:items[i],status:st,note});
+    }
+    heading('Items to review');
+    if(!attention.length){ensure(25);txt('No checklist items were marked Monitor, Repair recommended, or Safety concern.',M,y,8.5,false,muted);y+=20;}
+    for(let a of attention){
+      let noteLines=a.note?pdfWrap('Inspector note: '+a.note,85):[],itemLines=pdfWrap(a.item,70);
+      let rh=Math.max(31,itemLines.length*10+noteLines.length*9+17);ensure(rh+4);
+      txt(a.group.toUpperCase(),M,y,6.5,true,muted);
+      let badgeW=Math.min(125,Math.max(55,a.status.length*3.5+12));
+      rect(W-M-badgeW,y-2,badgeW,14,statusColor(a.status));txt(a.status,M+(W-2*M)-badgeW+6,y+8,6.2,true,statusText(a.status));
+      itemLines.forEach((ln,j)=>txt(ln,M,y+13+j*10,8,false,ink));
+      noteLines.forEach((ln,j)=>txt(ln,M+8,y+13+itemLines.length*10+j*9,7,false,muted));
+      y+=rh;rule(y);y+=4;
+    }
+  }else{
+    heading('Detailed checklist results');
+    for(let [group,items] of Object.entries(groups)){
+      ensure(30);rect(M,y,W-2*M,19,'#EAF0F5');txt(group,M+8,y+13,8.5,true,navy);y+=24;
+      for(let i=0;i<items.length;i++){
+        let k=group+'|'+i,st=o.checks?.[k]||'Not inspected',note=o.checks?.[k+'|note']||'';
+        let lines=pdfWrap(items[i],57),noteLines=note?pdfWrap('Notes: '+note,85):[];let rh=Math.max(25,lines.length*10+noteLines.length*9+8);ensure(rh+3);
+        if(y+rh>H-54){newPage();rect(M,y,W-2*M,19,'#EAF0F5');txt(group+' (continued)',M+8,y+13,8.5,true,navy);y+=24;}
+        lines.forEach((ln,j)=>txt(ln,M+5,y+10+j*10,7.5,false,ink));
+        let badgeW=Math.min(135,Math.max(52,st.length*3.4+12));rect(W-M-badgeW,y+2,badgeW,14,statusColor(st));txt(st,M+(W-2*M)-badgeW+6,y+12,6.3,true,statusText(st));
+        noteLines.forEach((ln,j)=>txt(ln,M+10,y+10+lines.length*10+j*9,6.8,false,muted));
+        y+=rh;rule(y);y+=3;
+      }
+    }
+  }
+  heading(mode==='customer'?'Additional findings and recommendations':'Detailed inspector findings');
  let findings=o.findings||[];
  if(!findings.length){ensure(20);txt('No additional findings entered.',M,y,8.5,false,muted);y+=18;}
  for(let f of findings){let lines=pdfWrap(f.text,95);let blockH=22+lines.length*11;ensure(blockH);txt(pdfSafe(f.system)+' - '+pdfSafe(f.priority),M,y,9,true,orange);y+=13;y=paragraph(f.text,M+5,y,W-2*M-10,8.5,ink)+9;}
@@ -275,7 +296,7 @@ async function buildWasatchPDF(o){
    txt(ph.caption,x,top+ih+12,7,true,navy);
    if(i%2===1)y+=ih+30;else if(i===photoEntries.length-1)y+=ih+30;
  }
- heading('Scope & limitations');
+ heading(mode==='customer'?'Important inspection information':'Scope & limitations');
  const scope='This is a limited, non-invasive inspection of accessible components at the time and place stated. It is not a teardown, engineering analysis, safety certification, warranty or guarantee. Concealed, inaccessible, intermittent or disassembled-component defects may not be detected. Diagnostic trouble codes are observations, not proof of a failed component. Unless specifically documented, this inspection does not include fluid laboratory analysis, internal engine/transmission inspection, compression or leak-down testing, alignment measurement, title/lien verification, accident-history research or emissions testing. Road testing is performed only when lawful and reasonably safe. Findings describe conditions observed on the inspection date. Further evaluation by a qualified repair facility may be appropriate.';
  y=paragraph(scope,M,y,W-2*M,7.4,muted)+15;ensure(55);
  txt('INSPECTOR',M,y,6.5,true,muted);txt(v.signInspector||v.inspector||'Not signed',M,y+14,9,true,ink);txt('CUSTOMER ACKNOWLEDGMENT',M+270,y,6.5,true,muted);txt(v.ackCustomer||'Not provided',M+270,y+14,9,true,ink);y+=38;
@@ -299,10 +320,20 @@ async function buildWasatchPDF(o){
  let xrefStart=offset,xref=`xref\n0 ${objects.length}\n0000000000 65535 f \n`;for(let i=1;i<objects.length;i++)xref+=String(offsets[i]).padStart(10,'0')+' 00000 n \n';xref+=`trailer\n<< /Size ${objects.length} /Root 1 0 R >>\nstartxref\n${xrefStart}\n%%EOF`;
  chunks.push(strBytes(xref));return new Blob([concat(chunks)],{type:'application/pdf'});
 }
-function pdfFileName(o){let v=o.vehicle||{},base=[v.year,v.make,v.model].filter(Boolean).join('-')||'Vehicle';return ('Wasatch-Inspection-'+base+'-'+(o.id||'Report')).replace(/[^a-zA-Z0-9-]/g,'-')+'.pdf'}
-async function downloadPDF(o){try{let blob=await buildWasatchPDF(o),url=URL.createObjectURL(blob),old=document.getElementById('pdfReady');if(old)old.remove();let overlay=document.createElement('div');overlay.id='pdfReady';overlay.style.cssText='position:fixed;inset:0;z-index:1000;background:#10182899;display:flex;align-items:center;justify-content:center;padding:18px';let card=document.createElement('div');card.style.cssText='width:min(420px,100%);background:#fff;border-radius:16px;padding:22px;box-shadow:0 18px 55px #0004;color:#1b2635;font:15px/1.45 -apple-system,BlinkMacSystemFont,Segoe UI,sans-serif';let title=document.createElement('h2');title.textContent='Your inspection PDF is ready';title.style.cssText='margin:0 0 8px;color:#172b45;font-size:20px';let detail=document.createElement('p');detail.textContent='A real PDF file has been generated on this device. It includes the inspection details, checklist, findings and attached photos.';detail.style.cssText='margin:0 0 16px;color:#667085;font-size:13px';let download=document.createElement('a');download.href=url;download.download=pdfFileName(o);download.textContent='Download PDF';download.style.cssText='display:block;text-align:center;text-decoration:none;background:#d97732;color:#fff;font-weight:800;padding:13px;border-radius:10px;margin-bottom:9px';let open=document.createElement('a');open.href=url;open.target='_blank';open.rel='noopener';open.textContent='Open PDF preview';open.style.cssText='display:block;text-align:center;text-decoration:none;background:#e8edf3;color:#172b45;font-weight:700;padding:12px;border-radius:10px;margin-bottom:10px';let note=document.createElement('p');note.textContent='On iPhone, if the PDF opens in a preview instead of downloading, tap Share, then Save to Files.';note.style.cssText='font-size:12px;color:#667085;margin:8px 0 14px';let close=document.createElement('button');close.textContent='Close';close.style.cssText='width:100%;background:#172b45;color:white;border:0;border-radius:10px;padding:11px;font-weight:700';close.onclick=()=>{overlay.remove();setTimeout(()=>URL.revokeObjectURL(url),60000)};card.append(title,detail,download,open,note,close);overlay.append(card);document.body.append(overlay)}catch(e){console.error(e);alert('PDF generation failed: '+(e?.message||e))}}
-async function generateReport(){await saveCurrent();await downloadPDF(current)}
-async function quickReport(id){let o=await get(id);if(o)await downloadPDF(o)}
+function pdfFileName(o,mode='technical'){let v=o.vehicle||{},base=[v.year,v.make,v.model].filter(Boolean).join('-')||'Vehicle';return ('Wasatch-'+(mode==='customer'?'Customer-Report':'Inspector-Report')+'-'+base+'-'+(o.id||'Report')).replace(/[^a-zA-Z0-9-]/g,'-')+'.pdf'}
+async function downloadPDF(o,mode='technical'){try{let blob=await buildWasatchPDF(o,mode),url=URL.createObjectURL(blob),old=document.getElementById('pdfReady');if(old)old.remove();let overlay=document.createElement('div');overlay.id='pdfReady';overlay.style.cssText='position:fixed;inset:0;z-index:1000;background:#10182899;display:flex;align-items:center;justify-content:center;padding:18px';let card=document.createElement('div');card.style.cssText='width:min(420px,100%);background:#fff;border-radius:16px;padding:22px;box-shadow:0 18px 55px #0004;color:#1b2635;font:15px/1.45 -apple-system,BlinkMacSystemFont,Segoe UI,sans-serif';let title=document.createElement('h2');title.textContent='Your inspection PDF is ready';title.style.cssText='margin:0 0 8px;color:#172b45;font-size:20px';let detail=document.createElement('p');detail.textContent=mode==='customer'?'Customer-friendly report with a plain-language overview, priority items, recommendations and photos.':'Detailed inspector report with the complete checklist, technical notes, findings and photos.';detail.style.cssText='margin:0 0 16px;color:#667085;font-size:13px';let download=document.createElement('a');download.href=url;download.download=pdfFileName(o,mode);download.textContent='Download PDF';download.style.cssText='display:block;text-align:center;text-decoration:none;background:#d97732;color:#fff;font-weight:800;padding:13px;border-radius:10px;margin-bottom:9px';let open=document.createElement('a');open.href=url;open.target='_blank';open.rel='noopener';open.textContent='Open PDF preview';open.style.cssText='display:block;text-align:center;text-decoration:none;background:#e8edf3;color:#172b45;font-weight:700;padding:12px;border-radius:10px;margin-bottom:10px';let note=document.createElement('p');note.textContent='On iPhone, if the PDF opens in a preview instead of downloading, tap Share, then Save to Files.';note.style.cssText='font-size:12px;color:#667085;margin:8px 0 14px';let close=document.createElement('button');close.textContent='Close';close.style.cssText='width:100%;background:#172b45;color:white;border:0;border-radius:10px;padding:11px;font-weight:700';close.onclick=()=>{overlay.remove();setTimeout(()=>URL.revokeObjectURL(url),60000)};card.append(title,detail,download,open,note,close);overlay.append(card);document.body.append(overlay)}catch(e){console.error(e);alert('PDF generation failed: '+(e?.message||e))}}
+function chooseReport(o){
+ let old=document.getElementById('reportChoice');if(old)old.remove();
+ let overlay=document.createElement('div');overlay.id='reportChoice';overlay.style.cssText='position:fixed;inset:0;z-index:999;background:#10182899;display:flex;align-items:center;justify-content:center;padding:18px';
+ let card=document.createElement('div');card.style.cssText='width:min(440px,100%);background:#fff;border-radius:16px;padding:22px;box-shadow:0 18px 55px #0004;color:#1b2635;font:15px/1.45 -apple-system,BlinkMacSystemFont,Segoe UI,sans-serif';
+ let title=document.createElement('h2');title.textContent='Choose your inspection report';title.style.cssText='margin:0 0 8px;color:#172b45;font-size:20px';
+ let intro=document.createElement('p');intro.textContent='Create either version. Both include inspection photos.';intro.style.cssText='margin:0 0 16px;color:#667085;font-size:13px';
+ function option(label,description,mode){let wrap=document.createElement('div');wrap.style.cssText='border:1px solid #d9e0e8;border-radius:10px;padding:12px;margin:9px 0';let b=document.createElement('button');b.textContent=label;b.style.cssText='width:100%;background:#172b45;color:white;border:0;border-radius:8px;padding:12px;font-weight:800';let p=document.createElement('p');p.textContent=description;p.style.cssText='font-size:12px;color:#667085;margin:8px 0 0';b.onclick=()=>{overlay.remove();downloadPDF(o,mode)};wrap.append(b,p);return wrap}
+ let close=document.createElement('button');close.textContent='Cancel';close.style.cssText='width:100%;background:#e8edf3;color:#172b45;border:0;border-radius:8px;padding:11px;font-weight:700';close.onclick=()=>overlay.remove();
+ card.append(title,intro,option('Customer-friendly report','Easy-to-read overview, plain-language explanations, priority items and photos.','customer'),option('Detailed inspector report','Full category-by-category checklist, technical notes, findings and photos.','technical'),close);overlay.append(card);document.body.append(overlay);
+}
+async function generateReport(){await saveCurrent();chooseReport(current)}
+async function quickReport(id){let o=await get(id);if(o)chooseReport(o)}
 
 async function exportBackup(){let a=await all(),blob=new Blob([JSON.stringify({app:'Wasatch Inspector',version:1,exported:new Date().toISOString(),inspections:a})],{type:'application/json'}),url=URL.createObjectURL(blob),ael=document.createElement('a');ael.href=url;ael.download='wasatch-inspections-backup-'+new Date().toISOString().slice(0,10)+'.json';ael.click();URL.revokeObjectURL(url)}
 async function restoreBackup(e){let file=e.target.files[0];if(!file)return;try{let data=JSON.parse(await file.text());if(!Array.isArray(data.inspections))throw Error('Invalid backup');if(!confirm(`Import ${data.inspections.length} inspection(s)? Existing records with the same IDs will be replaced.`))return;for(let o of data.inspections)await put(o);await renderHome();alert('Backup restored.')}catch(err){alert('Could not restore backup: '+err.message)}e.target.value=''}

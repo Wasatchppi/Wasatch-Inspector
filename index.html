@@ -315,7 +315,7 @@ async function buildWasatchPDF(o,mode='technical'){
  let findings=o.findings||[];
  if(!findings.length){ensure(20);txt('No additional findings entered.',M,y,8.5,false,muted);y+=18;}
  for(let f of findings){let lines=pdfWrap(f.text,95);let blockH=22+lines.length*11;ensure(blockH);txt(pdfSafe(f.system)+' - '+pdfSafe(f.priority),M,y,9,true,orange);y+=13;y=paragraph(f.text,M+5,y,W-2*M-10,8.5,ink)+9;}
- heading('Photographic evidence');
+ // Category headings below identify the photo groups; avoid a redundant generic heading.
  const photoGroups=new Map();
  function photoCategory(label){
    const s=String(label||'').toLowerCase();
@@ -374,6 +374,8 @@ async function buildWasatchPDF(o,mode='technical'){
      }
    }
  }
+ // Keep limitations and acknowledgement together instead of stranding the signature block.
+ ensure(190);
  heading(mode==='customer'?'Important inspection information':'Scope & limitations');
  const scope='This is a limited, non-invasive inspection of accessible components at the time and place stated. It is not a teardown, engineering analysis, safety certification, warranty or guarantee. Concealed, inaccessible, intermittent or disassembled-component defects may not be detected. Diagnostic trouble codes are observations, not proof of a failed component. Unless specifically documented, this inspection does not include fluid laboratory analysis, internal engine/transmission inspection, compression or leak-down testing, alignment measurement, title/lien verification, accident-history research or emissions testing. Road testing is performed only when lawful and reasonably safe. Findings describe conditions observed on the inspection date. Further evaluation by a qualified repair facility may be appropriate.';
  y=paragraph(scope,M,y,W-2*M,7.4,muted)+15;ensure(55);

@@ -316,15 +316,63 @@ async function buildWasatchPDF(o,mode='technical'){
  if(!findings.length){ensure(20);txt('No additional findings entered.',M,y,8.5,false,muted);y+=18;}
  for(let f of findings){let lines=pdfWrap(f.text,95);let blockH=22+lines.length*11;ensure(blockH);txt(pdfSafe(f.system)+' - '+pdfSafe(f.priority),M,y,9,true,orange);y+=13;y=paragraph(f.text,M+5,y,W-2*M-10,8.5,ink)+9;}
  heading('Photographic evidence');
- let photoEntries=[];for(let f of findings){for(let p of (f.photos||[])){if(p&&p.startsWith('data:image/jpeg'))photoEntries.push({data:p,caption:f.system+' - '+f.priority})}}for(let [group,items] of Object.entries(groups)){for(let i=0;i<items.length;i++){let k=group+'|'+i;for(let p of (o.checks?.[k+'|photos']||[])){if(p&&p.startsWith('data:image/jpeg'))photoEntries.push({data:p,caption:group+' - '+items[i]})}}}
- if(!photoEntries.length){ensure(20);txt('No photographs attached.',M,y,8.5,false,muted);y+=18;}
- for(let i=0;i<photoEntries.length;i++){
-   let ph=photoEntries[i],info=await pdfImageInfo(ph.data);let maxW=245,maxH=155,scale=Math.min(maxW/info.w,maxH/info.h),iw=info.w*scale,ih=info.h*scale;ensure(ih+35);
-   let name='Im'+i;let bytes=pdfBytesFromBase64(ph.data);page.images.push({name,bytes,w:info.w,h:info.h});
-   let x=M+(i%2)*265;if(i%2===0&&i>0){y+=8;ensure(ih+35)}
-   let top=y;let py=H-top-ih;page.ops.push(`q ${iw.toFixed(2)} 0 0 ${ih.toFixed(2)} ${x} ${py.toFixed(2)} cm /${name} Do Q`);
-   txt(ph.caption,x,top+ih+12,7,true,navy);
-   if(i%2===1)y+=ih+30;else if(i===photoEntries.length-1)y+=ih+30;
+ const photoGroups=new Map();
+ function photoCategory(label){
+   const s=String(label||'').toLowerCase();
+   const rules=[
+     [/tire|wheel|brake/,'Tires, wheels & brakes'],
+     [/engine|coolant|oil|battery|underhood/,'Engine & underhood'],
+     [/transmission|drivetrain|differential|axle|transfer case|clutch/,'Transmission & drivetrain'],
+     [/steer|suspension|shock|strut|ball joint|tie rod/,'Steering & suspension'],
+     [/interior|seat|airbag|hvac|window|camera|seat belt/,'Interior & safety'],
+     [/electrical|diagnostic|trouble code|scan tool|wiring/,'Electrical & diagnostics'],
+     [/underbody|undercarriage|frame|rust|exhaust|fuel line|floor pan/,'Undercarriage'],
+     [/road test|driving|acceleration|braking/,'Road test'],
+     [/diesel|hybrid|electric vehicle|turbo|truck|adas|4wd|awd/,'Vehicle-specific systems'],
+     [/exterior|body|paint|glass|light|bumper|door/,'Exterior & body']
+   ];
+   return (rules.find(([re])=>re.test(s))||[])[1]||'Additional findings';
+ }
+ function addPhoto(category,data,caption){
+   if(!data||!data.startsWith('data:image/jpeg'))return;
+   if(!photoGroups.has(category))photoGroups.set(category,[]);
+   photoGroups.get(category).push({data,caption});
+ }
+ for(let f of findings){
+   let category=photoCategory(f.system);
+   for(let p of (f.photos||[]))addPhoto(category,p,(f.system||category)+' · '+(f.priority||'Finding'));
+ }
+ for(let [group,items] of Object.entries(groups)){
+   for(let i=0;i<items.length;i++){
+     let k=group+'|'+i;
+     for(let p of (o.checks?.[k+'|photos']||[]))addPhoto(group,p,items[i]);
+   }
+ }
+ if(!photoGroups.size){
+   ensure(20);txt('No photographs attached.',M,y,8.5,false,muted);y+=18;
+ }else{
+   for(let [category,entries] of photoGroups){
+     heading(category);
+     for(let i=0;i<entries.length;i+=2){
+       let row=entries.slice(i,i+2),prepared=[];
+       for(let j=0;j<row.length;j++){
+         let info=await pdfImageInfo(row[j].data),maxW=245,maxH=135;
+         let scale=Math.min(maxW/info.w,maxH/info.h),iw=info.w*scale,ih=info.h*scale;
+         prepared.push({entry:row[j],info,iw,ih,bytes:pdfBytesFromBase64(row[j].data)});
+       }
+       let rowH=Math.max(...prepared.map(p=>p.ih))+30;
+       ensure(rowH);
+       let top=y;
+       for(let j=0;j<prepared.length;j++){
+         let p=prepared[j],x=M+j*265,name='Im'+pages.reduce((n,pg)=>n+pg.images.length,0);
+         page.images.push({name,bytes:p.bytes,w:p.info.w,h:p.info.h});
+         let py=H-top-p.ih;
+         page.ops.push(`q ${p.iw.toFixed(2)} 0 0 ${p.ih.toFixed(2)} ${x} ${py.toFixed(2)} cm /${name} Do Q`);
+         txt(p.entry.caption,x,top+p.ih+12,7,true,navy);
+       }
+       y+=rowH;
+     }
+   }
  }
  heading(mode==='customer'?'Important inspection information':'Scope & limitations');
  const scope='This is a limited, non-invasive inspection of accessible components at the time and place stated. It is not a teardown, engineering analysis, safety certification, warranty or guarantee. Concealed, inaccessible, intermittent or disassembled-component defects may not be detected. Diagnostic trouble codes are observations, not proof of a failed component. Unless specifically documented, this inspection does not include fluid laboratory analysis, internal engine/transmission inspection, compression or leak-down testing, alignment measurement, title/lien verification, accident-history research or emissions testing. Road testing is performed only when lawful and reasonably safe. Findings describe conditions observed on the inspection date. Further evaluation by a qualified repair facility may be appropriate.';

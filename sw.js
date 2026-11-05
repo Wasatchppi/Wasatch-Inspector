@@ -1,4 +1,4 @@
-const CACHE='wasatch-inspector-v7';
+const CACHE='wasatch-inspector-v8';
 const ASSETS=['./','./index.html','./manifest.webmanifest'];
 
 self.addEventListener('install',event=>{

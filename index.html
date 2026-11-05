@@ -353,29 +353,34 @@ async function buildWasatchPDF(o,mode='technical'){
  }else{
    for(let [category,entries] of photoGroups){
      heading(category);
+     // Fixed-height photo frames keep portrait and landscape evidence aligned.
      for(let i=0;i<entries.length;i+=2){
        let row=entries.slice(i,i+2),prepared=[];
        for(let j=0;j<row.length;j++){
-         let info=await pdfImageInfo(row[j].data),maxW=245,maxH=135;
+         let info=await pdfImageInfo(row[j].data),maxW=235,maxH=132;
          let scale=Math.min(maxW/info.w,maxH/info.h),iw=info.w*scale,ih=info.h*scale;
          prepared.push({entry:row[j],info,iw,ih,bytes:pdfBytesFromBase64(row[j].data)});
        }
-       let rowH=Math.max(...prepared.map(p=>p.ih))+30;
-       ensure(rowH);
+       const colW=255,gap=18,frameH=140,cardH=174;
+       ensure(cardH+6);
        let top=y;
        for(let j=0;j<prepared.length;j++){
-         let p=prepared[j],x=M+j*265,name='Im'+pages.reduce((n,pg)=>n+pg.images.length,0);
+         let p=prepared[j],x=M+j*(colW+gap),name='Im'+pages.reduce((n,pg)=>n+pg.images.length,0);
+         rect(x,top,colW,cardH,'#F7F9FB',line);
          page.images.push({name,bytes:p.bytes,w:p.info.w,h:p.info.h});
-         let py=H-top-p.ih;
-         page.ops.push(`q ${p.iw.toFixed(2)} 0 0 ${p.ih.toFixed(2)} ${x} ${py.toFixed(2)} cm /${name} Do Q`);
-         txt(p.entry.caption,x,top+p.ih+12,7,true,navy);
+         let imageX=x+(colW-p.iw)/2;
+         let imageTop=top+4+(frameH-p.ih)/2;
+         let py=H-imageTop-p.ih;
+         page.ops.push(`q ${p.iw.toFixed(2)} 0 0 ${p.ih.toFixed(2)} ${imageX.toFixed(2)} ${py.toFixed(2)} cm /${name} Do Q`);
+         let captionLines=pdfWrap(p.entry.caption||category,48).slice(0,2);
+         captionLines.forEach((ln,k)=>txt(ln,x+9,top+154+k*8,6.6,true,navy));
        }
-       y+=rowH;
+       y+=cardH+7;
      }
    }
  }
- // Keep limitations and acknowledgement together instead of stranding the signature block.
- ensure(190);
+ // Keep the scope and acknowledgment with the photo pages when space permits.
+ ensure(165);
  heading(mode==='customer'?'Important inspection information':'Scope & limitations');
  const scope='This is a limited, non-invasive inspection of accessible components at the time and place stated. It is not a teardown, engineering analysis, safety certification, warranty or guarantee. Concealed, inaccessible, intermittent or disassembled-component defects may not be detected. Diagnostic trouble codes are observations, not proof of a failed component. Unless specifically documented, this inspection does not include fluid laboratory analysis, internal engine/transmission inspection, compression or leak-down testing, alignment measurement, title/lien verification, accident-history research or emissions testing. Road testing is performed only when lawful and reasonably safe. Findings describe conditions observed on the inspection date. Further evaluation by a qualified repair facility may be appropriate.';
  y=paragraph(scope,M,y,W-2*M,7.4,muted)+15;ensure(55);

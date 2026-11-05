@@ -379,13 +379,17 @@ async function buildWasatchPDF(o,mode='technical'){
      }
    }
  }
- // Keep the scope and acknowledgment with the photo pages when space permits.
- ensure(165);
- heading(mode==='customer'?'Important inspection information':'Scope & limitations');
  const scope='This is a limited, non-invasive inspection of accessible components at the time and place stated. It is not a teardown, engineering analysis, safety certification, warranty or guarantee. Concealed, inaccessible, intermittent or disassembled-component defects may not be detected. Diagnostic trouble codes are observations, not proof of a failed component. Unless specifically documented, this inspection does not include fluid laboratory analysis, internal engine/transmission inspection, compression or leak-down testing, alignment measurement, title/lien verification, accident-history research or emissions testing. Road testing is performed only when lawful and reasonably safe. Findings describe conditions observed on the inspection date. Further evaluation by a qualified repair facility may be appropriate.';
- y=paragraph(scope,M,y,W-2*M,7.4,muted)+15;ensure(55);
+ const acknowledgment='Customer acknowledgment confirms receipt of this report, not agreement with every finding and not a waiver of rights.';
+ const scopeLines=pdfWrap(scope,Math.max(18,Math.floor((W-2*M)/(7.4*.51)))).length;
+ const acknowledgmentLines=pdfWrap(acknowledgment,Math.max(18,Math.floor((W-2*M)/(6.8*.51)))).length;
+ const closeoutHeight=23+scopeLines*(7.4+4)+15+38+acknowledgmentLines*(6.8+4)+10;
+ // Reserve the complete closeout block before drawing any of it, preventing orphaned signatures.
+ ensure(closeoutHeight);
+ heading(mode==='customer'?'Important inspection information':'Scope & limitations');
+ y=paragraph(scope,M,y,W-2*M,7.4,muted)+15;
  txt('INSPECTOR',M,y,6.5,true,muted);txt(v.signInspector||v.inspector||'Not signed',M,y+14,9,true,ink);txt('CUSTOMER ACKNOWLEDGMENT',M+270,y,6.5,true,muted);txt(v.ackCustomer||'Not provided',M+270,y+14,9,true,ink);y+=38;
- paragraph('Customer acknowledgment confirms receipt of this report, not agreement with every finding and not a waiver of rights.',M,y,W-2*M,6.8,muted);
+ y=paragraph(acknowledgment,M,y,W-2*M,6.8,muted)+10;
  // Page footer and PDF object assembly.
  const enc=new TextEncoder(),objects=[null,null,null];function addObj(bytes){objects.push(bytes);return objects.length-1}function strBytes(s){return enc.encode(s)}
  const f1=addObj(strBytes('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>'));

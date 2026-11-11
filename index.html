@@ -244,10 +244,31 @@ async function buildWasatchPDF(o,mode='technical'){
  let fields=[['Customer',v.customer],['Phone / email',v.phone],['Year',v.year],['Make',v.make],['Model',v.model],['VIN',v.vin],['Plate',v.plate],['Mileage',v.mileage],['Engine',v.engine],['Fuel',v.fuel],['Transmission',v.transmission],['Drivetrain',v.drivetrain],['Exterior color',v.color],['Inspection date',v.date],['Location',v.location||''],['Inspector',v.inspector||''],['Weather',v.weather||''],['Vehicle presented cold?',v.cold||'']];
  for(let i=0;i<fields.length;i+=2){ensure(34);let yy=y;labelValue(fields[i][0],fields[i][1],M,yy,245);if(fields[i+1])labelValue(fields[i+1][0],fields[i+1][1],M+270,yy,245);y+=31;}
  heading('Overall assessment');
- let overall=v.overall||'Not rated';rect(M,y,W-2*M,34,statusColor(overall));txt(overall.toUpperCase(),M+12,y+22,13,true,statusText(overall));y+=45;
- rect(M,y,W-2*M,49,'#F1F4F8');txt('HOW TO READ THIS REPORT',M+10,y+13,7,true,navy);txt('Pass = no unusual condition observed during this inspection.',M+10,y+25,7,false,ink);txt('Monitor = keep an eye on it; Repair = have it evaluated or repaired.',M+10,y+36,7,false,ink);y+=60;
- txt('EXECUTIVE SUMMARY',M,y,7,true,muted);y+=13;y=paragraph(v.summary||'No executive summary entered.',M,y,W-2*M,9,ink)+9;
- txt('BUYER FOLLOW-UP',M,y,7,true,muted);y+=13;y=paragraph(v.recommendation||'No buyer follow-up recommendation entered.',M,y,W-2*M,9,ink)+12;
+ const overall=v.overall||'Not rated';
+ const ratingDescriptions={
+   'Excellent':'No significant concerns were observed during this inspection.',
+   'Good':'Generally satisfactory condition; review any routine or minor items below.',
+   'Fair':'Several items need attention. Review findings and recommendations before purchase.',
+   'Poor':'Significant concerns were observed. Further evaluation and repair estimates are strongly recommended.'
+ };
+ rect(M,y,W-2*M,48,statusColor(overall));
+ txt('OVERALL CONDITION',M+12,y+13,6.5,true,muted);
+ txt(overall.toUpperCase(),M+12,y+32,14,true,statusText(overall));
+ paragraph(ratingDescriptions[overall]||'Review the findings below. An overall rating does not override any individual safety concern.',M+178,y+19,W-2*M-190,8,ink);
+ y+=58;
+ let summaryText=v.summary||'No executive summary entered.';
+ rect(M,y,W-2*M,Math.max(62,Math.min(104,pdfWrap(summaryText,78).length*12+35)),'#F1F4F8',line);
+ txt('EXECUTIVE SUMMARY',M+12,y+15,7,true,navy);
+ y=paragraph(summaryText,M+12,y+29,W-2*M-24,9,ink)+12;
+ let buyerText=v.recommendation||'No buyer follow-up recommendation entered.';
+ rect(M,y,W-2*M,Math.max(52,Math.min(90,pdfWrap(buyerText,82).length*11+31)),'#FFF5EC','#F2D3BD');
+ txt('BUYER FOLLOW-UP',M+12,y+14,7,true,orange);
+ y=paragraph(buyerText,M+12,y+27,W-2*M-24,8.5,ink)+12;
+ rect(M,y,W-2*M,38,'#F7F9FB',line);
+ txt('REPORT KEY',M+10,y+13,6.5,true,navy);
+ txt('Pass: no unusual condition observed   Monitor: keep an eye on it',M+10,y+24,6.5,false,ink);
+ txt('Repair / Safety: action or further evaluation recommended   Not inspected: not evaluated',M+10,y+33,6.1,false,ink);
+ y+=47;
  if(mode==='customer'){
     const customerStatus=s=>({
       'Pass / no abnormality observed':'No issue observed',
@@ -281,7 +302,7 @@ async function buildWasatchPDF(o,mode='technical'){
     y=paragraph('Every checklist item is listed below. “No issue observed” means no unusual condition was identified during this inspection; it is not a guarantee. “Not inspected” means the item could not be evaluated and should not be treated as a pass.',M,y,W-2*M,8,muted)+8;
     heading('Complete inspection results');
     for(let [group,items] of Object.entries(groups)){
-      ensure(30);rect(M,y,W-2*M,19,'#EAF0F5');txt(group,M+8,y+13,8.5,true,navy);y+=24;
+      ensure(82);rect(M,y,W-2*M,19,'#EAF0F5');txt(group,M+8,y+13,8.5,true,navy);y+=24;
       for(let i=0;i<items.length;i++){
         let k=group+'|'+i,st=o.checks?.[k]||'Not inspected',note=o.checks?.[k+'|note']||'';
         let display=customerStatus(st),lines=pdfWrap(items[i],59),noteLines=note?pdfWrap('Inspector note: '+note,82):[];
@@ -299,7 +320,7 @@ async function buildWasatchPDF(o,mode='technical'){
   }else{
     heading('Detailed checklist results');
     for(let [group,items] of Object.entries(groups)){
-      ensure(30);rect(M,y,W-2*M,19,'#EAF0F5');txt(group,M+8,y+13,8.5,true,navy);y+=24;
+      ensure(82);rect(M,y,W-2*M,19,'#EAF0F5');txt(group,M+8,y+13,8.5,true,navy);y+=24;
       for(let i=0;i<items.length;i++){
         let k=group+'|'+i,st=o.checks?.[k]||'Not inspected',note=o.checks?.[k+'|note']||'';
         let lines=pdfWrap(items[i],57),noteLines=note?pdfWrap('Notes: '+note,85):[];let rh=Math.max(25,lines.length*10+noteLines.length*9+8);ensure(rh+3);
@@ -352,8 +373,8 @@ async function buildWasatchPDF(o,mode='technical'){
    ensure(20);txt('No photographs attached.',M,y,8.5,false,muted);y+=18;
  }else{
    for(let [category,entries] of photoGroups){
-     heading(category);
-     // Fixed-height photo frames keep portrait and landscape evidence aligned.
+     ensure(190);heading(category);
+     // Photos are grouped by inspection system and captioned with the observed component. Fixed-height frames keep portrait and landscape evidence aligned.
      for(let i=0;i<entries.length;i+=2){
        let row=entries.slice(i,i+2),prepared=[];
        for(let j=0;j<row.length;j++){
